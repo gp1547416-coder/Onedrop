@@ -1,36 +1,60 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Cloud, Image as ImageIcon, FileText, Settings, ShieldCheck, Folder, Droplet, Plus, LogOut, X, ExternalLink } from 'lucide-react';
+import { Cloud, Image as ImageIcon, FileText, Settings, ShieldCheck, Folder, Droplet, Plus, LogOut, X, ExternalLink, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function Dashboard() {
   const router = useRouter();
-  const [uploadedFiles, setUploadedFiles] = useState<{name: string, size: string, time: string, url: string, type: string}[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
   const [selectedFile, setSelectedFile] = useState<any>(null);
 
+  // 1. Load files from iPad memory on startup
   useEffect(() => {
     const user = localStorage.getItem('onedrop_user');
     if (!user) router.push('/login');
+
+    const savedFiles = localStorage.getItem('onedrop_storage_files');
+    if (savedFiles) {
+      setUploadedFiles(JSON.parse(savedFiles));
+    }
   }, [router]);
+
+  // 2. Save to memory whenever the list changes
+  useEffect(() => {
+    if (uploadedFiles.length > 0) {
+      localStorage.setItem('onedrop_storage_files', JSON.stringify(uploadedFiles));
+    }
+  }, [uploadedFiles]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const blobUrl = URL.createObjectURL(file); // This creates the viewable link
-      const newFile = {
-        name: file.name,
-        size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        url: blobUrl,
-        type: file.type
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const newFile = {
+          name: file.name,
+          size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          url: reader.result, // Converts to Base64 so it SAVES permanently
+          type: file.type
+        };
+        const updated = [newFile, ...uploadedFiles];
+        setUploadedFiles(updated);
+        localStorage.setItem('onedrop_storage_files', JSON.stringify(updated));
       };
-      setUploadedFiles([newFile, ...uploadedFiles]);
+      reader.readAsDataURL(file);
     }
+  };
+
+  const deleteFile = (e: React.MouseEvent, index: number) => {
+    e.stopPropagation(); // Prevents the preview from opening
+    const updated = uploadedFiles.filter((_, i) => i !== index);
+    setUploadedFiles(updated);
+    localStorage.setItem('onedrop_storage_files', JSON.stringify(updated));
   };
 
   return (
     <div className="min-h-screen bg-[#f5f5f7]">
-      {/* Navigation */}
       <nav className="p-4 flex justify-between items-center bg-white/70 backdrop-blur-xl sticky top-0 z-50 border-b border-gray-200">
         <div className="flex items-center gap-2">
           <Droplet className="text-blue-600 fill-current w-6 h-6" />
@@ -44,13 +68,13 @@ export default function Dashboard() {
       <main className="max-w-6xl mx-auto px-6 py-12">
         <div className="flex justify-between items-end mb-12">
           <h2 className="text-4xl font-bold tracking-tight text-gray-900">Dashboard</h2>
-          <label className="bg-blue-600 text-white px-6 py-3 rounded-full font-semibold text-sm cursor-pointer hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-200">
+          <label className="bg-blue-600 text-white px-6 py-3 rounded-full font-semibold text-sm cursor-pointer hover:bg-blue-700 transition flex items-center gap-2 shadow-lg shadow-blue-200 active:scale-95">
             <Plus size={18} /> Import File
             <input type="file" className="hidden" onChange={handleFileUpload} />
           </label>
         </div>
         
-        {/* App Icons */}
+        {/* App Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-8 mb-20">
           {[
             { name: 'Drive', icon: <Cloud className="text-blue-500 w-10 h-10" /> },
@@ -68,14 +92,14 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Files List */}
+        {/* Files Section */}
         <section>
           <h3 className="text-2xl font-semibold mb-6">Recent Drops</h3>
           <div className="bg-white/80 backdrop-blur-md rounded-[2.5rem] p-4 sm:p-8 shadow-sm border border-white min-h-[300px]">
             {uploadedFiles.length === 0 ? (
               <div className="h-64 flex flex-col items-center justify-center text-gray-400">
                 <Folder size={48} className="mb-4 opacity-10" />
-                <p className="text-sm font-medium">Drop files from your iPad to begin.</p>
+                <p className="text-sm font-medium">Start importing files into OneDrop Storage.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-3">
@@ -86,13 +110,18 @@ export default function Dashboard() {
                     className="flex items-center gap-5 p-4 bg-white/50 hover:bg-white rounded-2xl border border-gray-100 transition cursor-pointer group"
                   >
                     <div className="bg-blue-50 p-3 rounded-xl text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition">
-                      {file.type.includes('image') ? <ImageIcon size={24} /> : <FileText size={24} />}
+                      {file.type?.includes('image') ? <ImageIcon size={24} /> : <FileText size={24} />}
                     </div>
                     <div className="flex-1">
                       <p className="font-semibold text-gray-800 text-lg leading-tight">{file.name}</p>
                       <p className="text-xs text-gray-400 font-medium">{file.size} • {file.time}</p>
                     </div>
-                    <ExternalLink size={18} className="text-gray-300 group-hover:text-blue-600 transition" />
+                    <button 
+                      onClick={(e) => deleteFile(e, i)}
+                      className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition"
+                    >
+                      <Trash2 size={20} />
+                    </button>
                   </div>
                 ))}
               </div>
@@ -101,27 +130,23 @@ export default function Dashboard() {
         </section>
       </main>
 
-      {/* iPad-style Quick Look Modal */}
+      {/* Preview Modal */}
       {selectedFile && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-10">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setSelectedFile(null)} />
-          <div className="relative w-full max-w-4xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-full">
+          <div className="relative w-full max-w-4xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-4 border-b flex justify-between items-center bg-gray-50/50">
               <p className="font-bold text-gray-900 px-4 truncate">{selectedFile.name}</p>
-              <button onClick={() => setSelectedFile(null)} className="p-2 hover:bg-gray-200 rounded-full transition">
-                <X size={20} />
-              </button>
+              <button onClick={() => setSelectedFile(null)} className="p-2 hover:bg-gray-200 rounded-full transition"><X size={20} /></button>
             </div>
             <div className="flex-1 overflow-auto bg-gray-100 flex items-center justify-center p-6">
-              {selectedFile.type.includes('image') ? (
+              {selectedFile.type?.includes('image') ? (
                 <img src={selectedFile.url} alt="Preview" className="max-w-full max-h-full rounded-lg shadow-lg" />
               ) : (
                 <div className="text-center p-12 bg-white rounded-3xl shadow-sm border border-gray-200">
                   <FileText size={64} className="mx-auto text-blue-600 mb-4" />
-                  <p className="text-lg font-bold mb-4">Preview not available for this type</p>
-                  <a href={selectedFile.url} download={selectedFile.name} className="bg-blue-600 text-white px-8 py-3 rounded-full font-bold">
-                    Download File
-                  </a>
+                  <p className="text-lg font-bold">Preview not available</p>
+                  <a href={selectedFile.url} download={selectedFile.name} className="mt-4 inline-block bg-blue-600 text-white px-8 py-3 rounded-full font-bold">Download</a>
                 </div>
               )}
             </div>
